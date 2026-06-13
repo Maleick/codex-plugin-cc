@@ -13,7 +13,10 @@ export function createBrokerEndpoint(sessionDir, platform = process.platform) {
     return `pipe:\\\\.\\pipe\\${pipeName}`;
   }
 
-  return `unix:${path.join(sessionDir, "broker.sock")}`;
+  // Use posix joins so non-Windows endpoints keep forward slashes even when
+  // this code runs on a Windows host (e.g. cross-platform unit tests). On real
+  // unix hosts path.join already is path.posix.join, so production is unchanged.
+  return `unix:${path.posix.join(sessionDir, "broker.sock")}`;
 }
 
 export function parseBrokerEndpoint(endpoint) {

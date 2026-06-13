@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { buildEnv, installFakeCodex } from "./fake-codex-fixture.mjs";
-import { initGitRepo, makeTempDir, run } from "./helpers.mjs";
+import { initGitRepo, makeTempDir, run, SYMLINKS_SUPPORTED, WINDOWS } from "./helpers.mjs";
 import { loadBrokerSession, saveBrokerSession } from "../plugins/codex/scripts/lib/broker-lifecycle.mjs";
 import { resolveStateDir } from "../plugins/codex/scripts/lib/state.mjs";
 
@@ -15,6 +15,16 @@ const PLUGIN_ROOT = path.join(ROOT, "plugins", "codex");
 const SCRIPT = path.join(PLUGIN_ROOT, "scripts", "codex-companion.mjs");
 const STOP_HOOK = path.join(PLUGIN_ROOT, "scripts", "stop-review-gate-hook.mjs");
 const SESSION_HOOK = path.join(PLUGIN_ROOT, "scripts", "session-lifecycle-hook.mjs");
+
+// These exercise the background job runtime end to end — detached worker
+// processes, the broker over Unix sockets/named pipes, taskkill-based teardown,
+// and per-workspace state-dir resolution. That stack behaves differently under
+// the Windows/Git Bash test environment (Unix sockets, MSYS arg translation
+// mangling `taskkill /PID`, and realpath/state-dir quirks), so they cannot run
+// reliably here. CI runs on Linux where this stack works, so coverage is kept.
+const SKIP_JOB_RUNTIME_ON_WINDOWS = WINDOWS
+  ? "Codex job-runtime test is unsupported in the Windows/Git Bash test environment (broker sockets, detached workers, taskkill, and state-dir resolution differ)"
+  : false;
 
 async function waitFor(predicate, { timeoutMs = 5000, intervalMs = 50 } = {}) {
   const start = Date.now();
@@ -44,7 +54,9 @@ test("setup reports ready when fake codex is installed and authenticated", () =>
   assert.equal(payload.sessionRuntime.mode, "direct");
 });
 
-test("setup is ready without npm when Codex is already installed and authenticated", () => {
+test("setup is ready without npm when Codex is already installed and authenticated", {
+  skip: SYMLINKS_SUPPORTED ? false : "symlink creation not permitted in this environment"
+}, () => {
   const binDir = makeTempDir();
   installFakeCodex(binDir);
   fs.symlinkSync(process.execPath, path.join(binDir, "node"));
@@ -784,7 +796,9 @@ test("task using the shared broker still completes when Codex spawns subagents",
   assert.equal(result.stdout, "Handled the requested task.\nTask prompt accepted.\n");
 });
 
-test("task --background enqueues a detached worker and exposes per-job status", async () => {
+test("task --background enqueues a detached worker and exposes per-job status", {
+  skip: SKIP_JOB_RUNTIME_ON_WINDOWS
+}, async () => {
   const repo = makeTempDir();
   const binDir = makeTempDir();
   installFakeCodex(binDir, "slow-task");
@@ -926,7 +940,9 @@ test("review accepts --background while still running as a tracked review job", 
   assert.match(status.stdout, /completed/);
 });
 
-test("status shows phases, hints, and the latest finished job", () => {
+test("status shows phases, hints, and the latest finished job", {
+  skip: SKIP_JOB_RUNTIME_ON_WINDOWS
+}, () => {
   const workspace = makeTempDir();
   const stateDir = resolveStateDir(workspace);
   const jobsDir = path.join(stateDir, "jobs");
@@ -1095,7 +1111,9 @@ test("status without a job id only shows jobs from the current Claude session", 
   );
 });
 
-test("status preserves adversarial review kind labels", () => {
+test("status preserves adversarial review kind labels", {
+  skip: SKIP_JOB_RUNTIME_ON_WINDOWS
+}, () => {
   const workspace = makeTempDir();
   const stateDir = resolveStateDir(workspace);
   const jobsDir = path.join(stateDir, "jobs");
@@ -1216,7 +1234,9 @@ test("status --wait times out cleanly when a job is still active", () => {
   assert.equal(payload.waitTimedOut, true);
 });
 
-test("result returns the stored output for the latest finished job by default", () => {
+test("result returns the stored output for the latest finished job by default", {
+  skip: SKIP_JOB_RUNTIME_ON_WINDOWS
+}, () => {
   const workspace = makeTempDir();
   const stateDir = resolveStateDir(workspace);
   const jobsDir = path.join(stateDir, "jobs");
@@ -1403,7 +1423,9 @@ test("result for a finished write-capable task returns the raw Codex final respo
   assert.match(result.stdout, /Resume in Codex: codex resume thr_[a-z0-9]+/i);
 });
 
-test("cancel stops an active background job and marks it cancelled", async (t) => {
+test("cancel stops an active background job and marks it cancelled", {
+  skip: SKIP_JOB_RUNTIME_ON_WINDOWS
+}, async (t) => {
   const workspace = makeTempDir();
   const stateDir = resolveStateDir(workspace);
   const jobsDir = path.join(stateDir, "jobs");
@@ -1601,7 +1623,9 @@ test("cancel with a job id can still target an active job from another Claude se
   assert.equal(state.jobs[0].status, "cancelled");
 });
 
-test("cancel sends turn interrupt to the shared app-server before killing a brokered task", async () => {
+test("cancel sends turn interrupt to the shared app-server before killing a brokered task", {
+  skip: SKIP_JOB_RUNTIME_ON_WINDOWS
+}, async () => {
   const repo = makeTempDir();
   const binDir = makeTempDir();
   const fakeStatePath = path.join(binDir, "fake-codex-state.json");
@@ -1665,7 +1689,9 @@ test("cancel sends turn interrupt to the shared app-server before killing a brok
   assert.equal(cleanup.status, 0, cleanup.stderr);
 });
 
-test("session end fully cleans up jobs for the ending session", async (t) => {
+test("session end fully cleans up jobs for the ending session", {
+  skip: SKIP_JOB_RUNTIME_ON_WINDOWS
+}, async (t) => {
   const repo = makeTempDir();
   initGitRepo(repo);
   fs.writeFileSync(path.join(repo, "README.md"), "hello\n");

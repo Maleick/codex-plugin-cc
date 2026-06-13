@@ -255,10 +255,14 @@ The Codex plugin wraps the [Codex app server](https://developers.openai.com/code
 
 ### Common Configurations
 
-If you want to change the default reasoning effort or the default model that gets used by the plugin, you can define that inside your user-level or project-level `config.toml`. For example to always use `gpt-5.4-mini` on `high` for a specific project you can add the following to a `.codex/config.toml` file at the root of the directory you started Claude in:
+The plugin does not pin a model. It uses whatever model your Codex CLI is configured to use, so it works with any model your Codex install exposes — including the latest `gpt-5.5`. You can also pick a model per run with `--model` (see [`/codex:rescue`](#codexrescue)).
+
+The current Codex models for ChatGPT sign-in are `gpt-5.5` (newest), `gpt-5.4`, `gpt-5.4-mini` (smaller and faster), and `gpt-5.3-codex-spark` (preview). See the [Codex models docs](https://developers.openai.com/codex/models) for the current list.
+
+If you want to change the default reasoning effort or the default model that gets used by the plugin, you can define that inside your user-level or project-level `config.toml`. For example to always use `gpt-5.5` on `high` for a specific project you can add the following to a `.codex/config.toml` file at the root of the directory you started Claude in:
 
 ```toml
-model = "gpt-5.4-mini"
+model = "gpt-5.5"
 model_reasoning_effort = "high"
 ```
 
